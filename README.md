@@ -1,54 +1,33 @@
-# React + TypeScript + Vite
+# Whisper - Anonymous Gossip Web App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+⚠️ This was an experimental project for learning React, Webpack, and Node.js. The project currently has build issues due to compatibility with newer Node versions.
 
-Currently, two official plugins are available:
+## 🚀 Features (Planned or Implemented)
+- Anonymous post sharing
+- Real-time updates (planned)
+- Simple UI for easy access (React-based)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 📚 What I Learned
+- Webpack + React integration
+- Handling Node.js compatibility issues
+- Importance of version control for dependencies
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
+- React
+- Webpack
+- Node.js
+- Babel
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## ❌ Known Issues
+- Project does not start due to OpenSSL/Node/webpack version conflict
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 💡 Next Steps
+- Consider migrating to Vite or Next.js
+- Fix crypto issue with proper legacy provider or downgrade Node
+- Modularize app logic
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 📸 Screenshots
+*(Add images if you have any UI work done)*
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+## 🏷️ Tags
+#React #Webpack #NodeJS #LearningProject #WebDevelopment #OpenSource #Portfolio
