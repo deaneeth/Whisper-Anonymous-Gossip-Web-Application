@@ -1,5 +1,4 @@
 // Post component for displaying posts
-// At the top of Post.tsx, add:
 import React, { useState, useEffect } from 'react';
 import { CryptoService, AuthService } from '../services/crypto-service';
 import { Post as PostType, Comment as CommentType, Vote } from '../services/database-service';
@@ -154,37 +153,43 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
   const authorId = AuthService.getDisplayId(post.authorPublicKey);
   
   return (
-    <div className="bg-white rounded-lg shadow mb-4 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-card hover:shadow-md transition-shadow duration-300 mb-4 overflow-hidden border border-whisper-200">
       {/* Post header */}
-      <div className="p-4 pb-2">
-        <div className="flex items-center text-sm text-gray-500">
-          <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold mr-2">
+      <div className="p-4 pb-2 border-b border-whisper-100">
+        <div className="flex items-center text-sm text-whisper-500">
+          <div className="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold mr-2 shadow-sm">
             {authorId.slice(0, 2).toUpperCase()}
           </div>
-          <span className="mr-3">{authorId}</span>
-          <span>{formatTimestamp(post.timestamp)}</span>
+          <span className="mr-3 font-medium">{authorId}</span>
+          <span className="text-whisper-400">{formatTimestamp(post.timestamp)}</span>
         </div>
       </div>
       
       {/* Post content */}
-      <div className="px-4 py-2">
+      <div className="px-4 py-3">
         {loading ? (
-          <div className="animate-pulse h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+          <div className="animate-pulse space-y-2">
+            <div className="h-4 bg-whisper-100 rounded w-3/4 mb-2"></div>
+            <div className="h-4 bg-whisper-100 rounded w-full mb-2"></div>
+            <div className="h-4 bg-whisper-100 rounded w-2/3"></div>
+          </div>
         ) : error ? (
-          <div className="text-red-500 text-sm">{error}</div>
+          <div className="text-accent-600 text-sm p-2 bg-accent-50 rounded-md">{error}</div>
         ) : (
-          <p className="text-gray-800 whitespace-pre-wrap">{decryptedContent}</p>
+          <p className="text-whisper-800 whitespace-pre-wrap leading-relaxed">{decryptedContent}</p>
         )}
       </div>
       
       {/* Post footer */}
-      <div className="px-4 py-2 border-t border-gray-100">
+      <div className="px-4 py-3 bg-whisper-50 border-t border-whisper-100">
         <div className="flex items-center justify-between">
           {/* Vote buttons */}
           <div className="flex items-center space-x-2">
             <button 
               onClick={() => handleVote(1)}
-              className={`p-1 rounded ${voteStatus === 1 ? 'text-green-600' : 'text-gray-500 hover:text-green-600'}`}
+              className={`p-1.5 rounded-full transition-colors ${voteStatus === 1 
+                ? 'text-primary-600 bg-primary-50' 
+                : 'text-whisper-500 hover:text-primary-600 hover:bg-primary-50'}`}
               aria-label="Upvote"
             >
               <svg 
@@ -199,14 +204,16 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
             </button>
             
             <span className={`text-sm font-medium ${
-              voteScore > 0 ? 'text-green-600' : voteScore < 0 ? 'text-red-600' : 'text-gray-500'
+              voteScore > 0 ? 'text-primary-600' : voteScore < 0 ? 'text-accent-600' : 'text-whisper-500'
             }`}>
               {voteScore}
             </span>
             
             <button 
               onClick={() => handleVote(-1)}
-              className={`p-1 rounded ${voteStatus === -1 ? 'text-red-600' : 'text-gray-500 hover:text-red-600'}`}
+              className={`p-1.5 rounded-full transition-colors ${voteStatus === -1 
+                ? 'text-accent-600 bg-accent-50' 
+                : 'text-whisper-500 hover:text-accent-600 hover:bg-accent-50'}`}
               aria-label="Downvote"
             >
               <svg 
@@ -228,7 +235,7 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
                 setExpanded(!expanded);
                 setShowCommentForm(false);
               }}
-              className="flex items-center text-sm text-gray-500 hover:text-indigo-600"
+              className="flex items-center text-sm text-whisper-500 hover:text-primary-600 transition-colors"
             >
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
@@ -244,7 +251,9 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" 
                 />
               </svg>
-              <span>{post.commentCount} comments</span>
+              <span className={post.commentCount > 0 ? 'font-medium' : ''}>
+                {post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}
+              </span>
             </button>
           )}
         </div>
@@ -252,12 +261,12 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
       
       {/* Comment section */}
       {expanded && !isPreview && (
-        <div className="border-t border-gray-100">
+        <div className="border-t border-whisper-200">
           {/* Add comment button */}
           <div className="p-4">
             <button
               onClick={() => setShowCommentForm(!showCommentForm)}
-              className="text-sm text-indigo-600 hover:text-indigo-800"
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
             >
               {showCommentForm ? 'Cancel' : 'Add a comment'}
             </button>
@@ -293,7 +302,23 @@ const Post: React.FC<PostProps> = ({ post, keyPair, isPreview = false }) => {
                 />
               ))
             ) : (
-              <p className="text-sm text-gray-500">No comments yet</p>
+              <div className="py-4 text-center text-sm text-whisper-500 bg-whisper-50 rounded-md">
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-6 w-6 mx-auto mb-2 text-whisper-400" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" 
+                  />
+                </svg>
+                <p>No comments yet - be the first to share your thoughts!</p>
+              </div>
             )}
           </div>
         </div>
