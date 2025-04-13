@@ -13,9 +13,7 @@ Whisper is a prototype web application designed for **anonymous gossip-style pos
 
 ## 📸 Preview
 
-> _(Add a screenshot or UI mockup below when ready. You can use a design file or placeholder image.)_
-
-![Whisper UI preview](https://via.placeholder.com/800x400?text=Whisper+App+UI+Preview)
+> I'll add a screenshot when it's ready <
 
 ---
 
