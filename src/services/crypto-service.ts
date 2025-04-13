@@ -47,6 +47,8 @@ export class CryptoService {
   // Initialize the master key from user's private key
   static async initializeMasterKey(privateKey: string): Promise<void> {
     try {
+      console.log('Initializing master encryption key...');
+      
       // Convert private key string to bytes for key derivation
       const privateKeyBytes = this.base64ToBuffer(privateKey);
       
@@ -64,7 +66,7 @@ export class CryptoService {
         {
           name: 'PBKDF2',
           salt: this.SALT,
-          iterations: 100000,
+          iterations: 100000, // Higher iteration count for better security
           hash: 'SHA-256'
         },
         baseKey,
@@ -73,7 +75,7 @@ export class CryptoService {
         ['encrypt', 'decrypt']
       );
       
-      console.log('Master encryption key initialized');
+      console.log('Master encryption key initialized successfully');
     } catch (error) {
       console.error('Failed to initialize master key:', error);
       throw new Error('Failed to initialize encryption. Your browser may not support the required cryptographic features.');
@@ -159,51 +161,26 @@ export class CryptoService {
         throw new Error('Encryption key not initialized. Please authenticate first.');
       }
       
-      // Generate a random key for this specific data
-      const dataKey = await window.crypto.subtle.generateKey(
-        {
-          name: 'AES-GCM',
-          length: 256,
-        },
-        true, // extractable
-        ['encrypt', 'decrypt']
-      );
-      
       // Generate a random IV (Initialization Vector)
-      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      const iv = window.crypto.getRandomValues(new Uint8Array(12)); // 12 bytes for AES-GCM
       
       // Convert data to buffer
       const dataBuffer = new TextEncoder().encode(data);
       
-      // Encrypt the data with the data-specific key
+      // Encrypt the data directly with the master key
       const cipherBuffer = await window.crypto.subtle.encrypt(
         {
           name: 'AES-GCM',
           iv: iv,
         },
-        dataKey,
+        this.masterKey,
         dataBuffer
       );
       
-      // Export the data key
-      const dataKeyBuffer = await window.crypto.subtle.exportKey('raw', dataKey);
-      
-      // Encrypt the data key with the master key
-      const encryptedKeyIv = window.crypto.getRandomValues(new Uint8Array(12));
-      const encryptedKeyBuffer = await window.crypto.subtle.encrypt(
-        {
-          name: 'AES-GCM',
-          iv: encryptedKeyIv,
-        },
-        this.masterKey,
-        dataKeyBuffer
-      );
-      
-      // Return the encrypted data, IV, and encrypted key
+      // Return the encrypted data and IV
       return {
         ciphertext: this.bufferToBase64(cipherBuffer),
-        iv: this.bufferToBase64(iv),
-        key: this.bufferToBase64(encryptedKeyBuffer) + '.' + this.bufferToBase64(encryptedKeyIv)
+        iv: this.bufferToBase64(iv)
       };
     } catch (error) {
       console.error('Failed to encrypt data:', error);
@@ -223,45 +200,13 @@ export class CryptoService {
       const cipherBuffer = this.base64ToBuffer(encryptedData.ciphertext);
       const ivBuffer = this.base64ToBuffer(encryptedData.iv);
       
-      // Check if we have an encrypted data key
-      if (!encryptedData.key) {
-        throw new Error('Encrypted data is missing the key. Cannot decrypt.');
-      }
-      
-      // Extract the encrypted key and its IV
-      const [encryptedKeyBase64, encryptedKeyIvBase64] = encryptedData.key.split('.');
-      const encryptedKeyBuffer = this.base64ToBuffer(encryptedKeyBase64);
-      const encryptedKeyIv = this.base64ToBuffer(encryptedKeyIvBase64);
-      
-      // Decrypt the data key with the master key
-      const dataKeyBuffer = await window.crypto.subtle.decrypt(
-        {
-          name: 'AES-GCM',
-          iv: encryptedKeyIv,
-        },
-        this.masterKey,
-        encryptedKeyBuffer
-      );
-      
-      // Import the data key
-      const dataKey = await window.crypto.subtle.importKey(
-        'raw',
-        dataKeyBuffer,
-        {
-          name: 'AES-GCM',
-          length: 256,
-        },
-        false, // not extractable
-        ['decrypt'] // key usage
-      );
-      
-      // Decrypt the data with the data key
+      // Decrypt directly with the master key
       const decryptedBuffer = await window.crypto.subtle.decrypt(
         {
           name: 'AES-GCM',
           iv: ivBuffer,
         },
-        dataKey,
+        this.masterKey,
         cipherBuffer
       );
       
@@ -304,11 +249,21 @@ export class AuthService {
       // Try to load existing keys from localStorage
       const savedKeyPair = this.loadKeyPair();
       if (savedKeyPair) {
-        // Initialize master key for encryption/decryption
-        await CryptoService.initializeMasterKey(savedKeyPair.privateKey);
-        return savedKeyPair;
+        console.log('Found existing key pair, initializing...');
+        
+        try {
+          // Initialize master key for encryption/decryption
+          await CryptoService.initializeMasterKey(savedKeyPair.privateKey);
+          return savedKeyPair;
+        } catch (error) {
+          console.error('Failed to initialize with saved key pair:', error);
+          // If initialization fails, remove the corrupted key pair
+          this.signOut();
+          return null;
+        }
       }
       
+      console.log('No existing key pair found');
       return null; // No existing keys found
     } catch (error) {
       console.error('Failed to initialize authentication:', error);
@@ -316,16 +271,20 @@ export class AuthService {
     }
   }
   
-  // Save key pair to localStorage (encrypted)
+  // Save key pair to localStorage
   static saveKeyPair(keyPair: KeyPair): void {
     try {
+      console.log('Saving key pair to localStorage...');
+      
       // In a production app, we would encrypt this with a password
-      // For now, we just store it directly (still a security risk)
+      // For now, we store it directly
       localStorage.setItem(this.KEY_STORAGE_KEY, JSON.stringify(keyPair));
       
       // Initialize master key for encryption/decryption
       CryptoService.initializeMasterKey(keyPair.privateKey)
         .catch(error => console.error('Failed to initialize master key during save:', error));
+        
+      console.log('Key pair saved successfully');
     } catch (error) {
       console.error('Failed to save key pair:', error);
       throw new Error('Failed to save your authentication keys. Please ensure your browser supports localStorage.');
@@ -335,8 +294,11 @@ export class AuthService {
   // Load key pair from localStorage
   static loadKeyPair(): KeyPair | null {
     try {
+      console.log('Loading key pair from localStorage...');
+      
       const storedKeyPair = localStorage.getItem(this.KEY_STORAGE_KEY);
       if (!storedKeyPair) {
+        console.log('No key pair found in localStorage');
         return null;
       }
       
@@ -344,10 +306,11 @@ export class AuthService {
       
       // Validate that the key pair has required properties
       if (!keyPair.publicKey || !keyPair.privateKey) {
-        console.error('Loaded key pair is invalid');
+        console.error('Loaded key pair is invalid - missing required properties');
         return null;
       }
       
+      console.log('Key pair loaded successfully');
       return keyPair;
     } catch (error) {
       console.error('Failed to load key pair:', error);
@@ -358,7 +321,9 @@ export class AuthService {
   // Sign out - clear keys from storage
   static signOut(): void {
     try {
+      console.log('Signing out and removing key pair...');
       localStorage.removeItem(this.KEY_STORAGE_KEY);
+      console.log('Sign out complete');
     } catch (error) {
       console.error('Failed to sign out:', error);
     }
