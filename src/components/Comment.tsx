@@ -1,7 +1,7 @@
 // Comment.tsx - Component for displaying comments
 import React, { useState, useEffect } from 'react';
 import { CryptoService, AuthService } from '../services/crypto-service';
-import { db as databaseInstance, Comment as CommentType } from '../services/database-service';
+import { Comment as CommentType } from '../services/database-service';
 import { KeyPair } from '../types';
 import CreateComment from './CreateComment';
 import { db } from '../services/database-service';
@@ -82,8 +82,14 @@ const Comment: React.FC<CommentProps> = ({ comment, keyPair, level, onCommentAdd
         [comment.id, 'comment', keyPair.publicKey]
       );
 
-      if (Array.isArray(votes) && votes.length > 0 && typeof (votes[0] as { value: unknown }).value === 'number') {
-        setVoteStatus(votes[0].value);
+      // Fix type issue: properly check if votes is an array with at least one item
+      if (Array.isArray(votes) && votes.length > 0) {
+        const vote = votes[0] as { value: number };
+        if (vote && typeof vote.value === 'number') {
+          setVoteStatus(vote.value);
+        } else {
+          setVoteStatus(0);
+        }
       } else {
         setVoteStatus(0);
       }
@@ -267,3 +273,5 @@ const Comment: React.FC<CommentProps> = ({ comment, keyPair, level, onCommentAdd
 };
 
 export default Comment;
+
+//new one
