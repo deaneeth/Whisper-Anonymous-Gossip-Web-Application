@@ -46,8 +46,6 @@ Whisper is a prototype web application designed for **anonymous gossip-style pos
 
 > This version may not work due to Node.js v17+ compatibility issues. A fix involves using the `--openssl-legacy-provider` or downgrading Node.js to v16.x.
 
-## 🛠️ Recommended Fix (Future Plan)
-Refactor project using Vite or Next.js for better support with modern Node.js versions.
 
 ## 🚧 Project Status
 ❌ Archived	 - Due to Webpack/Node.js compatibility issues
