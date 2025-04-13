@@ -8,6 +8,7 @@ import { AuthService, CryptoService } from './services/crypto-service';
 import { db } from './services/database-service';
 import { p2p } from './services/p2p-service';
 
+
 // Import components
 import Login from './components/Login';
 import Header from './components/Header';
@@ -18,6 +19,8 @@ import LegalDisclaimer from './components/LegalDisclaimer';
 
 // Types
 import { KeyPair } from './types';
+
+import { Analytics } from "@vercel/analytics/react"
 
 // Main App component
 const App: React.FC = () => {
@@ -232,6 +235,7 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      <Analytics />
     </Router>
   );
 };
