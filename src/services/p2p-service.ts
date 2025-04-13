@@ -9,7 +9,6 @@ import 'gun/lib/rindexed'; // For local persistence
 
 import { CryptoService } from './crypto-service';
 import { db, Post, Comment, Vote } from './database-service';
-import { KeyPair } from '../types';
 
 // Type definition for Gun instance
 type GunInstance = {
@@ -24,7 +23,6 @@ type GunInstance = {
     };
   };
 };
-
 
 // P2P service for syncing data between peers
 export class P2PService {
@@ -70,23 +68,27 @@ export class P2PService {
       this.userPrivateKey = privateKey;
       
       // Pre-set user metadata to help with peer recognition
-      this.gun.user(publicKey).put({ pub: publicKey, online: true });
+      if (this.gun) {
+        this.gun.user(publicKey).put({ pub: publicKey, online: true });
       
-      // Start listening for data changes
-      await this.startListening();
-      
-      // Initial sync of local data to the network
-      await this.syncLocalDataToNetwork();
-      
-      this.isInitialized = true;
-      console.log(`P2P service initialized for user: ${publicKey.substring(0, 8)}...`);
-      
-      // Set up periodic sync to ensure data propagation
-      if (this.syncInterval) {
-        clearInterval(this.syncInterval);
+        // Start listening for data changes
+        await this.startListening();
+        
+        // Initial sync of local data to the network
+        await this.syncLocalDataToNetwork();
+        
+        this.isInitialized = true;
+        console.log(`P2P service initialized for user: ${publicKey.substring(0, 8)}...`);
+        
+        // Set up periodic sync to ensure data propagation
+        if (this.syncInterval) {
+          clearInterval(this.syncInterval);
+        }
+        
+        this.syncInterval = setInterval(() => this.periodicSync(), 30000); // Sync every 30 seconds
+      } else {
+        throw new Error('Gun.js instance not initialized');
       }
-      
-      this.syncInterval = setInterval(() => this.periodicSync(), 30000); // Sync every 30 seconds
     } catch (error) {
       console.error('Failed to initialize P2P service:', error);
       throw new Error('Failed to connect to the P2P network. Please try again.');
@@ -96,6 +98,11 @@ export class P2PService {
   // Start listening for data changes from peers
   private async startListening(): Promise<void> {
     console.log('Starting P2P listeners...');
+    
+    if (!this.gun) {
+      console.error('Gun.js instance not initialized');
+      return;
+    }
     
     // Listen for new posts from peers
     this.gun.get('posts').map().on(async (data: any, key: string) => {
@@ -270,6 +277,11 @@ export class P2PService {
     try {
       console.log('Starting P2P data sync...');
       
+      if (!this.gun) {
+        console.error('Gun.js instance not initialized');
+        return;
+      }
+      
       // Sync posts
       const posts = await db.getLatestPosts(50); // Limit to 50 latest posts
       console.log(`Syncing ${posts.length} posts to network...`);
@@ -293,8 +305,10 @@ export class P2PService {
         
         for (const comment of comments) {
           try {
-            this.gun.get('comments').get(comment.id).put(comment);
-            await this.delay(5); // Small delay between comments
+            if (this.gun) {
+              this.gun.get('comments').get(comment.id).put(comment);
+              await this.delay(5); // Small delay between comments
+            }
           } catch (error) {
             console.error(`Error syncing comment ${comment.id}:`, error);
           }
@@ -310,8 +324,10 @@ export class P2PService {
         
         for (const vote of votes) {
           try {
-            this.gun.get('votes').get(vote.id).put(vote);
-            await this.delay(5); // Small delay between votes
+            if (this.gun) {
+              this.gun.get('votes').get(vote.id).put(vote);
+              await this.delay(5); // Small delay between votes
+            }
           } catch (error) {
             console.error(`Error syncing vote ${vote.id}:`, error);
           }
@@ -331,7 +347,7 @@ export class P2PService {
   
   // Periodic sync to ensure data propagation
   private async periodicSync(): Promise<void> {
-    if (!this.isInitialized) return;
+    if (!this.isInitialized || !this.gun) return;
     
     try {
       // Get recent local posts (last 24 hours)
@@ -344,8 +360,10 @@ export class P2PService {
       
       // Re-publish recent posts to ensure they propagate
       for (const post of recentPosts) {
-        this.gun.get('posts').get(post.id).put(post);
-        await this.delay(100); // Larger delay for periodic sync
+        if (this.gun) {
+          this.gun.get('posts').get(post.id).put(post);
+          await this.delay(100); // Larger delay for periodic sync
+        }
       }
       
       console.log(`Periodic sync: republished ${recentPosts.length} recent posts`);
@@ -357,11 +375,19 @@ export class P2PService {
   // Publish a new post to the P2P network
   async publishPost(post: Post): Promise<void> {
     if (!this.isInitialized) {
-      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+      if (this.userPublicKey && this.userPrivateKey) {
+        await this.initialize(this.userPublicKey, this.userPrivateKey);
+      } else {
+        throw new Error('P2P service not initialized and missing keys');
+      }
     }
     
     try {
       console.log('Publishing post to network:', post.id);
+      
+      if (!this.gun) {
+        throw new Error('Gun.js instance not initialized');
+      }
       
       // Use simpler approach - just put the post in the posts path
       this.gun.get('posts').get(post.id).put(post);
@@ -376,11 +402,19 @@ export class P2PService {
   // Publish a new comment to the P2P network
   async publishComment(comment: Comment): Promise<void> {
     if (!this.isInitialized) {
-      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+      if (this.userPublicKey && this.userPrivateKey) {
+        await this.initialize(this.userPublicKey, this.userPrivateKey);
+      } else {
+        throw new Error('P2P service not initialized and missing keys');
+      }
     }
     
     try {
       console.log('Publishing comment to network:', comment.id);
+      
+      if (!this.gun) {
+        throw new Error('Gun.js instance not initialized');
+      }
       
       // Use simplified approach - just put in comments path
       this.gun.get('comments').get(comment.id).put(comment);
@@ -395,11 +429,20 @@ export class P2PService {
   // Publish a vote to the P2P network
   async publishVote(vote: Vote): Promise<void> {
     if (!this.isInitialized) {
-      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+      if (this.userPublicKey && this.userPrivateKey) {
+        await this.initialize(this.userPublicKey, this.userPrivateKey);
+      } else {
+        throw new Error('P2P service not initialized and missing keys');
+      }
     }
     
     try {
       console.log('Publishing vote to network:', vote.id);
+      
+      if (!this.gun) {
+        throw new Error('Gun.js instance not initialized');
+      }
+      
       this.gun.get('votes').get(vote.id).put(vote);
       console.log('Vote published to P2P network successfully');
     } catch (error) {
@@ -444,7 +487,7 @@ export class P2PService {
         let peers = 0;
         
         // Try to get peer information from Gun
-        if (this.gun && this.gun._.opt && this.gun._.opt.peers) {
+        if (this.gun && this.gun._ && this.gun._.opt && this.gun._.opt.peers) {
           peers = Object.keys(this.gun._.opt.peers).length;
         }
         
