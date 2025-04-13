@@ -1,7 +1,7 @@
 // Notifications.tsx - Displays user notifications
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { db, Notification as NotificationType, Post, Comment } from '../services/database-service';
+import { db, Notification as NotificationType } from '../services/database-service';
 import { AuthService } from '../services/crypto-service';
 import { KeyPair } from '../types';
 
@@ -15,38 +15,46 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   
+  // Function to fetch notifications - extracted for reuse
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch notifications for the current user
+      const userNotifications = await db.getNotifications(keyPair.publicKey);
+      
+      // Mark all notifications as read
+      const readPromises = userNotifications
+        .filter(notification => !notification.isRead)
+        .map(notification => db.markNotificationAsRead(notification.id));
+      
+      await Promise.all(readPromises);
+      
+      // Update notifications state
+      setNotifications(userNotifications);
+      
+      // Notify parent that notifications have been read
+      onNotificationRead();
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+      setError('Failed to load notifications. Please try refreshing the page.');
+      setLoading(false);
+    }
+  }, [keyPair.publicKey, onNotificationRead]);
+  
   // Fetch notifications on component mount
   useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch notifications for the current user
-        const userNotifications = await db.getNotifications(keyPair.publicKey);
-        
-        // Mark all notifications as read
-        for (const notification of userNotifications) {
-          if (!notification.isRead) {
-            await db.markNotificationAsRead(notification.id);
-          }
-        }
-        
-        // Update notifications state
-        setNotifications(userNotifications);
-        
-        // Notify parent that notifications have been read
-        onNotificationRead();
-        
-        setLoading(false);
-      } catch (error) {
-        console.error('Failed to fetch notifications:', error);
-        setError('Failed to load notifications. Please try refreshing the page.');
-        setLoading(false);
-      }
-    };
-    
     fetchNotifications();
-  }, [keyPair.publicKey, onNotificationRead]);
+    
+    // Set up periodic refresh for notifications
+    const refreshInterval = setInterval(() => {
+      fetchNotifications().catch(err => console.error('Error refreshing notifications:', err));
+    }, 60000); // Refresh every minute
+    
+    return () => clearInterval(refreshInterval);
+  }, [fetchNotifications]);
   
   // Format timestamp
   const formatTimestamp = (timestamp: number) => {
@@ -71,9 +79,11 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
       setLoading(true);
       
       // Mark all notifications as read
-      for (const notification of notifications) {
-        await db.markNotificationAsRead(notification.id);
-      }
+      const markPromises = notifications.map(notification => 
+        db.markNotificationAsRead(notification.id)
+      );
+      
+      await Promise.all(markPromises);
       
       // Remove all notifications from state
       setNotifications([]);
@@ -87,6 +97,11 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
       setError('Failed to clear notifications. Please try again.');
       setLoading(false);
     }
+  };
+  
+  // Handle refresh button click
+  const handleRefresh = () => {
+    fetchNotifications();
   };
   
   // Render notification message
@@ -115,18 +130,42 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
         
-        {notifications.length > 0 && (
+        <div className="flex space-x-2">
           <button
-            onClick={handleClearAll}
-            className="text-sm text-red-600 hover:text-red-800 focus:outline-none"
+            onClick={handleRefresh}
+            className="text-sm text-indigo-600 hover:text-indigo-800 focus:outline-none flex items-center"
             disabled={loading}
           >
-            Clear all
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+              />
+            </svg>
+            {loading ? 'Refreshing...' : 'Refresh'}
           </button>
-        )}
+          
+          {notifications.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="text-sm text-red-600 hover:text-red-800 focus:outline-none"
+              disabled={loading}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
       
-      {loading ? (
+      {loading && notifications.length === 0 ? (
         // Loading skeleton
         <div className="space-y-3">
           {[...Array(3)].map((_, index) => (
@@ -144,6 +183,12 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
       ) : error ? (
         <div className="bg-red-50 p-4 rounded-md text-red-700">
           <p>{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="mt-2 text-sm font-medium text-red-700 underline"
+          >
+            Try again
+          </button>
         </div>
       ) : notifications.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-6 text-center">
@@ -186,6 +231,16 @@ const Notifications: React.FC<NotificationsProps> = ({ keyPair, onNotificationRe
                   <p className="mt-1 text-xs text-gray-500">
                     {formatTimestamp(notification.timestamp)}
                   </p>
+                  
+                  {/* Add navigation to the related content */}
+                  <div className="mt-2">
+                    <Link
+                      to={notification.targetType === 'post' ? `/post/${notification.targetId}` : `/post/${notification.targetId.split('-')[0]}`}
+                      className="text-xs text-indigo-600 hover:text-indigo-800"
+                    >
+                      View {notification.targetType}
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>

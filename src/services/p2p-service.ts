@@ -7,51 +7,78 @@ import 'gun/lib/radisk';
 import 'gun/lib/store';
 import 'gun/lib/rindexed'; // For local persistence
 
-import { CryptoService, AuthService } from './crypto-service';
+import { CryptoService } from './crypto-service';
 import { db, Post, Comment, Vote } from './database-service';
+import { KeyPair } from '../types';
 
 // P2P service for syncing data between peers
 export class P2PService {
   private gun: any;
   private userPublicKey: string | null = null;
   private userPrivateKey: string | null = null;
+  private isInitialized: boolean = false;
   
   // Constructor initializes Gun.js with peer list
   constructor() {
-    // Initialize Gun with minimal configuration
-    // We use some known relay peers to enhance discoverability
-    // These are just examples - in a real app, you'd use actual relay servers
+    // Initialize Gun with working relay servers
+    // Using public Gun.js relay servers that are known to work
     this.gun = Gun({
       peers: [
-        'https://relay1.gun-server.glitch.me/gun',
-        'https://relay2.gun-server.glitch.me/gun'
+        'https://gun-manhattan.herokuapp.com/gun',
+        'https://gun-us.herokuapp.com/gun',
+        'https://gun-eu.herokuapp.com/gun'
       ],
       localStorage: false, // We handle our own storage with IndexedDB
-      radisk: false // We use our own storage mechanism
+      radisk: true, // Enable persistent storage
+      file: 'whisper-gundb', // Local storage name
+      retry: 2000, // Retry interval in milliseconds
+      multicast: false // Disable WebRTC to focus on reliable relay servers
     });
+    
+    console.log('Gun.js initialized with relay servers');
   }
   
   // Initialize the P2P service with user's keys
   async initialize(publicKey: string, privateKey: string): Promise<void> {
-    this.userPublicKey = publicKey;
-    this.userPrivateKey = privateKey;
-    
-    // Start listening for data changes
-    this.startListening();
-    
-    // Sync local data to the network
-    await this.syncLocalDataToNetwork();
+    try {
+      if (this.isInitialized) {
+        this.disconnect(); // Disconnect before reinitializing
+      }
+      
+      this.userPublicKey = publicKey;
+      this.userPrivateKey = privateKey;
+      
+      // Pre-set user metadata to help with peer recognition
+      this.gun.user(publicKey).put({ pub: publicKey, online: true });
+      
+      // Start listening for data changes
+      await this.startListening();
+      
+      // Sync local data to the network
+      await this.syncLocalDataToNetwork();
+      
+      this.isInitialized = true;
+      console.log(`P2P service initialized for user: ${publicKey.substring(0, 8)}...`);
+      
+      // Set up periodic sync to ensure data propagation
+      setInterval(() => this.periodicSync(), 60000); // Sync every minute
+    } catch (error) {
+      console.error('Failed to initialize P2P service:', error);
+      throw new Error('Failed to connect to the P2P network. Please try again.');
+    }
   }
   
   // Start listening for data changes from peers
-  private startListening(): void {
+  private async startListening(): Promise<void> {
     // Listen for new posts from peers
     this.gun.get('posts').map().on(async (data: any, key: string) => {
-      if (!data) return;
+      if (!data || typeof data !== 'object' || !data.id) {
+        return; // Skip invalid data
+      }
       
       try {
         // Check if this post already exists locally
-        const existingPost = await db.getPost(key);
+        const existingPost = await db.getPost(data.id);
         if (existingPost) return; // Skip if already exists
         
         // Verify the post signature to ensure authenticity
@@ -83,18 +110,14 @@ export class P2PService {
     
     // Listen for new comments from peers
     this.gun.get('comments').map().on(async (data: any, key: string) => {
-      if (!data) return;
+      if (!data || typeof data !== 'object' || !data.id) {
+        return; // Skip invalid data
+      }
       
       try {
         // Check if this comment already exists locally
-        const existingComments = await db.getItemsByIndex<Comment>(
-          'comments', 
-          'byPostId', 
-          data.postId
-        );
-        
-        const exists = existingComments.some(c => c.id === key);
-        if (exists) return; // Skip if already exists
+        const existingComment = await db.getItem('comments', data.id);
+        if (existingComment) return; // Skip if already exists
         
         // Verify the comment signature to ensure authenticity
         const dataToVerify = JSON.stringify({
@@ -135,17 +158,14 @@ export class P2PService {
     
     // Listen for new votes from peers
     this.gun.get('votes').map().on(async (data: any, key: string) => {
-      if (!data) return;
+      if (!data || typeof data !== 'object' || !data.id) {
+        return; // Skip invalid data
+      }
       
       try {
         // Check if this vote already exists locally
-        const existingVotes = await db.getItemsByIndex<Vote>(
-          'votes', 
-          'unique_vote', 
-          [data.targetId, data.targetType, data.authorPublicKey]
-        );
-        
-        if (existingVotes.length > 0) return; // Skip if already exists
+        const existingVote = await db.getItem('votes', data.id);
+        if (existingVote) return; // Skip if already exists
         
         // Verify the vote signature to ensure authenticity
         const dataToVerify = JSON.stringify({
@@ -179,22 +199,33 @@ export class P2PService {
         console.error('Error processing vote from peer:', error);
       }
     });
+    
+    console.log('P2P listeners initialized');
   }
   
   // Sync local data to the P2P network
   private async syncLocalDataToNetwork(): Promise<void> {
     try {
-      // Sync posts
+      console.log('Starting P2P data sync...');
+      
+      // Sync posts in batches to avoid overloading the network
       const posts = await db.getLatestPosts(100); // Sync up to 100 latest posts
       for (const post of posts) {
-        this.gun.get('posts').get(post.id).put(post);
+        await this.gun.get('posts').get(post.id).put(post);
+        // Add a small delay to prevent network congestion
+        await this.delay(10);
       }
       
-      // Sync comments
-      for (const post of posts) {
-        const comments = await db.getCommentsForPost(post.id);
-        for (const comment of comments) {
-          this.gun.get('comments').get(comment.id).put(comment);
+      // Sync comments in batches for better performance
+      const batchSize = 20;
+      for (let i = 0; i < posts.length; i += batchSize) {
+        const batch = posts.slice(i, i + batchSize);
+        for (const post of batch) {
+          const comments = await db.getCommentsForPost(post.id);
+          for (const comment of comments) {
+            await this.gun.get('comments').get(comment.id).put(comment);
+            await this.delay(5);
+          }
         }
       }
       
@@ -202,20 +233,63 @@ export class P2PService {
       if (this.userPublicKey) {
         const votes = await db.getItemsByIndex<Vote>('votes', 'byAuthor', this.userPublicKey);
         for (const vote of votes) {
-          this.gun.get('votes').get(vote.id).put(vote);
+          await this.gun.get('votes').get(vote.id).put(vote);
+          await this.delay(5);
         }
       }
       
-      console.log('Local data synced to P2P network');
+      console.log(`P2P sync complete: ${posts.length} posts synced`);
     } catch (error) {
       console.error('Error syncing local data to network:', error);
     }
   }
   
+  // Helper method to create a delay
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  
+  // Periodic sync to ensure data propagation
+  private async periodicSync(): Promise<void> {
+    if (!this.isInitialized) return;
+    
+    try {
+      // Get recent local posts (last 24 hours)
+      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+      const recentPosts = await db.getItemsByIndex<Post>(
+        'posts',
+        'byTimestamp',
+        IDBKeyRange.lowerBound(oneDayAgo)
+      );
+      
+      // Re-publish recent posts to ensure they propagate
+      for (const post of recentPosts) {
+        await this.gun.get('posts').get(post.id).put(post);
+        await this.delay(50);
+      }
+      
+      console.log(`Periodic sync: republished ${recentPosts.length} recent posts`);
+    } catch (error) {
+      console.error('Error in periodic sync:', error);
+    }
+  }
+  
   // Publish a new post to the P2P network
   async publishPost(post: Post): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+    }
+    
     try {
+      // Put the post on multiple nodes for redundancy
       this.gun.get('posts').get(post.id).put(post);
+      this.gun.user().get('posts').get(post.id).put(post);
+      
+      // Also put a reference in the user's space
+      if (this.userPublicKey) {
+        this.gun.user(this.userPublicKey).get('posts').get(post.id).put(post);
+      }
+      
       console.log('Post published to P2P network:', post.id);
     } catch (error) {
       console.error('Error publishing post to network:', error);
@@ -225,8 +299,15 @@ export class P2PService {
   
   // Publish a new comment to the P2P network
   async publishComment(comment: Comment): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+    }
+    
     try {
+      // Put the comment on multiple nodes for redundancy
       this.gun.get('comments').get(comment.id).put(comment);
+      this.gun.get('posts').get(comment.postId).get('comments').get(comment.id).put(comment);
+      
       console.log('Comment published to P2P network:', comment.id);
     } catch (error) {
       console.error('Error publishing comment to network:', error);
@@ -236,6 +317,10 @@ export class P2PService {
   
   // Publish a vote to the P2P network
   async publishVote(vote: Vote): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initialize(this.userPublicKey!, this.userPrivateKey!);
+    }
+    
     try {
       this.gun.get('votes').get(vote.id).put(vote);
       console.log('Vote published to P2P network:', vote.id);
@@ -254,8 +339,31 @@ export class P2PService {
       this.gun.get('comments').off();
       this.gun.get('votes').off();
       
+      // Set user as offline
+      if (this.userPublicKey) {
+        this.gun.user(this.userPublicKey).put({ online: false });
+      }
+      
+      this.isInitialized = false;
       console.log('Disconnected from P2P network');
     }
+  }
+  
+  // Check P2P network status
+  async checkNetworkStatus(): Promise<{ connected: boolean, peers: number }> {
+    return new Promise((resolve) => {
+      let peers = 0;
+      
+      // Try to get peer information from Gun
+      if (this.gun && this.gun._.opt && this.gun._.opt.peers) {
+        peers = Object.keys(this.gun._.opt.peers).length;
+      }
+      
+      resolve({
+        connected: this.isInitialized && peers > 0,
+        peers
+      });
+    });
   }
 }
 

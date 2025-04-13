@@ -10,6 +10,7 @@ export default defineConfig({
     }
   },
   css: {
+    // Point directly to the PostCSS config file
     postcss: './postcss.config.js',
   }
 })
