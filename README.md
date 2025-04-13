@@ -13,7 +13,9 @@ Whisper is a prototype web application designed for **anonymous gossip-style pos
 
 ## 📸 Preview
 
-![file_2025-04-13_13 33 41 1](https://github.com/user-attachments/assets/4ab15037-87b1-40f6-b939-c0fc026bfe65) ![image](https://github.com/user-attachments/assets/c804d147-f16b-4ec9-8531-ac8b57aa6a7c)
+![file_2025-04-13_13 33 41 1](https://github.com/user-attachments/assets/4ab15037-87b1-40f6-b939-c0fc026bfe65) 
+![Screenshot 2025-04-13 195903](https://github.com/user-attachments/assets/29d92f4b-da6a-4865-8609-1bfcf514227e)
+
 
 
 ---
