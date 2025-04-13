@@ -13,10 +13,12 @@
 - Importance of version control for dependencies
 
 ## 🛠️ Tech Stack
-- React
-- Webpack
-- Node.js
-- Babel
+- ⚛️ JavaScript (React, JSX)
+- 🎨 CSS
+- 📄 HTML
+- 📦 Webpack & Babel
+- 🧰 Node.js
+- 🗂 JSON (config & data)
 
 ## ❌ Known Issues
 - Project does not start due to OpenSSL/Node/webpack version conflict
